@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { siteConfig } from "@/data/site";
 import Typewriter from "@/components/Typewriter";
 
@@ -13,7 +12,6 @@ export default function Home() {
       </div>
 
       <div className="flex flex-col items-center gap-4">
-        <Image src="/globe.svg" alt="Hero" width={96} height={96} className="drop-shadow-sm" />
         <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-fuchsia-600 to-cyan-600">
           {siteConfig.name}
         </h1>
