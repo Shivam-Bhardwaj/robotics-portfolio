@@ -353,7 +353,17 @@ export default function RoombaSimulation() {
       ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw world map
+      // Draw world map only in explored areas to simulate discovery
+      ctx.save();
+      ctx.beginPath();
+      gridRef.current.forEach((cell, key) => {
+        if (cell.explored > 0) {
+          const [gx, gy] = key.split(",").map(Number);
+          ctx.rect(gx * GRID_SIZE, gy * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+        }
+      });
+      ctx.clip();
+
       ctx.strokeStyle = "rgba(0, 150, 150, 0.3)";
       ctx.lineWidth = 0.5;
       ctx.fillStyle = "rgba(0, 100, 100, 0.1)";
@@ -370,6 +380,7 @@ export default function RoombaSimulation() {
         ctx.fill();
         ctx.stroke();
       });
+      ctx.restore();
       
       // Draw major cities as points
       MAJOR_CITIES.forEach(city => {
