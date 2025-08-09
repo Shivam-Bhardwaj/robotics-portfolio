@@ -22,11 +22,14 @@ export default function Home() {
       <p className="max-w-2xl text-gray-700">
         <Typewriter
           phrases={[
-            "I build robots that don’t bump into chairs.",
-            "Sometimes they do. We fix it with math.",
-            "Mapping, perception, control—preferably in real-time.",
+            "The gap between prototype and product? I live there.",
+            "From self-driving to med-tech, I ship reliable systems.",
+            "I optimize, reduce costs, and deliver hardware at scale.",
           ]}
         />
+      </p>
+      <p className="max-w-3xl text-gray-700">
+        As both a hands-on engineer and project manager, I turn complex concepts in self-driving and med-tech into reliable, deployed systems. I optimize, reduce costs, and ship products for companies like Meta, Applied Materials, Google, GoPro, Saildrone, Velodyne Lidar, Hummingbird EV, Tesla, and more than twenty startups and researchers. As an NSF-trained pedagogy professional, I also teach how to teach.
       </p>
       <div className="flex flex-wrap justify-center gap-3">
         <Link
