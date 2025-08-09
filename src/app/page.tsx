@@ -33,7 +33,7 @@ export default function Home() {
       <div className="flex flex-wrap justify-center gap-3">
         <Link
           href="/projects"
-          className="rounded-md bg-gray-900 text-white px-4 py-2 hover:bg-gray-700"
+          className="rounded-md bg-blue-600 text-white px-4 py-2 hover:bg-blue-500"
         >
           View Projects
         </Link>
