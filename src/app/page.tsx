@@ -44,6 +44,12 @@ export default function Home() {
         >
           My Skills
         </Link>
+        <Link
+          href="/swarm"
+          className="rounded-md border border-gray-300 px-4 py-2 hover:bg-gray-50"
+        >
+          Play Swarm Game
+        </Link>
         <a
           href={siteConfig.links.github}
           target="_blank"

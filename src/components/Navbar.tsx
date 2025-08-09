@@ -33,7 +33,10 @@ const Navbar = () => {
             <Link href="/skills" className={navItemClass("/skills")}>Skills</Link>
           </li>
           <li>
-            <Link href="/contact" className={navItemClass("/contact")}>
+            <Link href="/swarm" className={navItemClass("/swarm")}>Swarm Game</Link>
+          </li>
+          <li>
+            <Link href="/contact" className={navItemClass("/contact")}> 
               Contact
             </Link>
           </li>
