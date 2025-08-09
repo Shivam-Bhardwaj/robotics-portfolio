@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Swarm Robotics Simulation
+
+Guide a fleet of robots with your cursor and try to explore the entire map as quickly as possible. The overlay tracks coverage and time, and pressing **R** resets the challenge so you can beat your best run.
+
 ## Getting Started
 
 First, run the development server:
