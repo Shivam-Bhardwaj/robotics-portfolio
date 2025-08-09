@@ -7,12 +7,12 @@ const Navbar = () => {
   const pathname = usePathname();
 
   const navItemClass = (href: string) =>
-    `hover:text-gray-300 ${pathname === href ? "text-gray-300 underline" : ""}`;
+    `${pathname === href ? "text-blue-600 underline" : "text-gray-600"} hover:text-gray-800`;
 
   return (
-    <nav className="bg-gray-800 text-white p-4">
+    <nav className="bg-white text-gray-800 shadow p-4">
       <div className="container mx-auto flex justify-between items-center">
-        <Link href="/" className="text-2xl font-bold">
+        <Link href="/" className="text-2xl font-bold text-gray-900">
           {siteConfig.name}
         </Link>
         <ul className="flex space-x-4">

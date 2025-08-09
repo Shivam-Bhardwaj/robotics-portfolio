@@ -23,7 +23,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ name, description, imageUrl, 
           height={480}
           className="h-auto w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/70 via-white/30 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       </div>
       <div className="p-4">
         <h3 className="text-xl font-bold mb-2">{name}</h3>

@@ -849,17 +849,17 @@ export default function RoombaSimulation() {
 
   return (
     <>
-      <canvas 
-        ref={canvasRef} 
-        className="fixed inset-0 pointer-events-none opacity-70 -z-10" 
-        style={{ background: "linear-gradient(135deg, #0a0a0f, #0f0f1a)" }}
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 pointer-events-none opacity-40 -z-10"
+        style={{ background: "linear-gradient(135deg, #ffffff, #e3f2fd)" }}
       />
-      <div 
+      <div
         ref={telemetryRef}
-        className="fixed top-4 left-4 bg-black/80 backdrop-blur-sm border border-cyan-600/30 rounded-lg p-4 pointer-events-none z-50"
+        className="fixed top-4 left-4 bg-white/80 text-gray-800 backdrop-blur-sm border border-cyan-600/30 rounded-lg p-4 pointer-events-none z-50"
         style={{ minWidth: "320px" }}
       />
-      <div className="fixed bottom-4 left-4 font-mono text-xs text-cyan-400/60 pointer-events-none z-50">
+      <div className="fixed bottom-4 left-4 font-mono text-xs text-cyan-700/70 pointer-events-none z-50">
         <div>GLOBAL ROBOTICS NETWORK v2.0</div>
         <div>Click robot for telemetry</div>
         <div>{NUM_ROBOTS} agents | {MAJOR_CITIES.length} nodes</div>
