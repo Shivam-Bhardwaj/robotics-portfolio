@@ -405,16 +405,23 @@ export default function RoombaSimulation() {
         }
       });
       
-      // Draw explored areas and heat map overlay
+      // Apply faded overlay so map starts desaturated
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Reveal explored areas by clearing overlay
       gridRef.current.forEach((cell, key) => {
         const [gx, gy] = key.split(",").map(Number);
         const x = gx * GRID_SIZE;
         const y = gy * GRID_SIZE;
 
         if (cell.explored > 0) {
-          const alpha = cell.explored * 0.3;
-          ctx.fillStyle = `rgba(0, 255, 150, ${alpha})`;
-          ctx.fillRect(x, y, GRID_SIZE, GRID_SIZE);
+          const alpha = (1 - cell.explored) * 0.6;
+          ctx.clearRect(x, y, GRID_SIZE, GRID_SIZE);
+          if (alpha > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.fillRect(x, y, GRID_SIZE, GRID_SIZE);
+          }
         }
 
         if (cell.heat > 0) {
@@ -851,12 +858,12 @@ export default function RoombaSimulation() {
     <>
       <canvas
         ref={canvasRef}
-        className="fixed inset-0 pointer-events-none opacity-40 -z-10"
+        className="fixed inset-0 pointer-events-none -z-10"
         style={{ background: "linear-gradient(135deg, #ffffff, #e3f2fd)" }}
       />
       <div
         ref={telemetryRef}
-        className="fixed top-4 left-4 bg-white/80 text-gray-800 backdrop-blur-sm border border-cyan-600/30 rounded-lg p-4 pointer-events-none z-50"
+        className="fixed bottom-4 right-4 bg-white/80 text-gray-800 backdrop-blur-sm border border-cyan-600/30 rounded-lg p-4 pointer-events-none z-50"
         style={{ minWidth: "320px" }}
       />
       <div className="fixed bottom-4 left-4 font-mono text-xs text-cyan-700/70 pointer-events-none z-50">
