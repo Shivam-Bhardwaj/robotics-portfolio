@@ -148,7 +148,7 @@ export default function RoombaSimulation() {
         y,
         vx: 0,
         vy: 0,
-        angle: angle + Math.PI,
+        angle: Math.random() * Math.PI * 2,
         targetAngle: 0,
         path: [],
         scanAngle: 0,
