@@ -25,6 +25,11 @@ const Navbar = () => {
             </Link>
           </li>
           <li>
+            <Link href="/experience" className={navItemClass("/experience")}>
+              Experience
+            </Link>
+          </li>
+          <li>
             <Link href="/skills" className={navItemClass("/skills")}>Skills</Link>
           </li>
           <li>

@@ -1,9 +1,9 @@
 export const siteConfig = {
   name: "Shivam Bhardwaj",
-  role: "Robotics Engineer",
-  email: "your.email@example.com",
-  location: "California",
-  currentCompany: "AntiMony Group",
+  role: "Project Manager & Robotics Engineer",
+  email: "contact@shivambhardwaj.com",
+  location: "San Jose, CA",
+  currentCompany: "Design Visionaries",
   links: {
     github: "https://github.com/Shivam-Bhardwaj",
     linkedin: "https://www.linkedin.com/in/shivambdj/",
