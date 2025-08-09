@@ -11,22 +11,7 @@ const FORMATION_RADIUS = 80;
 const PARTICLE_COUNT = 50;
 const LIDAR_RAYS = 16;
 
-// Simplified world map coordinates (normalized to 0-1)
-const WORLD_MAP = [
-  // North America
-  { points: [[0.15, 0.3], [0.35, 0.25], [0.38, 0.35], [0.35, 0.45], [0.25, 0.5], [0.15, 0.45], [0.1, 0.35]], name: "N. America" },
-  // South America
-  { points: [[0.25, 0.55], [0.3, 0.58], [0.32, 0.75], [0.28, 0.85], [0.22, 0.8], [0.2, 0.65]], name: "S. America" },
-  // Europe
-  { points: [[0.45, 0.25], [0.55, 0.22], [0.58, 0.3], [0.52, 0.35], [0.48, 0.32]], name: "Europe" },
-  // Africa
-  { points: [[0.45, 0.4], [0.52, 0.38], [0.58, 0.45], [0.55, 0.65], [0.48, 0.7], [0.42, 0.65], [0.4, 0.5]], name: "Africa" },
-  // Asia
-  { points: [[0.55, 0.2], [0.75, 0.15], [0.85, 0.25], [0.88, 0.35], [0.82, 0.45], [0.7, 0.4], [0.6, 0.35]], name: "Asia" },
-  // Australia
-  { points: [[0.75, 0.65], [0.82, 0.62], [0.85, 0.7], [0.8, 0.75], [0.72, 0.72]], name: "Australia" },
-];
-
+// Major cities for initial robot distribution
 const MAJOR_CITIES = [
   { x: 0.28, y: 0.32, name: "New York" },
   { x: 0.18, y: 0.38, name: "Los Angeles" },
@@ -100,6 +85,7 @@ export default function RoombaSimulation() {
   const prevMouseRef = useRef({ x: 0, y: 0 });
   const robotsRef = useRef<Robot[]>([]);
   const gridRef = useRef<Map<string, GridCell>>(new Map());
+  const worldDataRef = useRef<[number, number][][]>([]);
   const animationRef = useRef<number | undefined>(undefined);
   const obstaclesRef = useRef<DOMRect[]>([]);
   const initializedRef = useRef(false);
@@ -113,12 +99,36 @@ export default function RoombaSimulation() {
 
     const width = window.innerWidth;
     const height = window.innerHeight;
-    
+
     const colors = [
       "#00ffff", "#ff00ff", "#ffff00", "#00ff00",
       "#ff6600", "#6600ff", "#ff0066", "#66ff00",
       "#00ffaa", "#ffaa00", "#aa00ff", "#aaff00"
     ];
+
+    // Load world map data
+    type GeoFeature = {
+      geometry: {
+        type: string;
+        coordinates: number[][] | number[][][] | number[][][][];
+      };
+    };
+    fetch("/countries.geo.json")
+      .then((res) => res.json())
+      .then((data: { features: GeoFeature[] }) => {
+        const polygons: [number, number][][] = [];
+        data.features.forEach((feature) => {
+          const { type, coordinates } = feature.geometry;
+          if (type === "Polygon") {
+            (coordinates as [number, number][][]).forEach((ring) => polygons.push(ring));
+          } else if (type === "MultiPolygon") {
+            (coordinates as [number, number][][][]).forEach((poly) => {
+              poly.forEach((ring) => polygons.push(ring));
+            });
+          }
+        });
+        worldDataRef.current = polygons;
+      });
     
     const initializeParticles = (): Particle[] => {
       return Array.from({ length: PARTICLE_COUNT }, () => ({
@@ -238,7 +248,7 @@ export default function RoombaSimulation() {
       gridRef.current.set(key, cell);
     };
 
-    const checkObstacleCollision = (x: number, y: number, radius: number = 25) => {
+    const checkObstacleCollision = (x: number, y: number, radius: number = 15) => {
       for (const obs of obstaclesRef.current) {
         if (
           x + radius > obs.left &&
@@ -253,9 +263,20 @@ export default function RoombaSimulation() {
     };
 
     const updateObstacles = () => {
-      obstaclesRef.current = Array.from(
-        document.querySelectorAll("button, a, nav, footer, main > *")
-      ).map((el) => el.getBoundingClientRect());
+      if (!canvasRef.current) return;
+      const canvasEl = canvasRef.current;
+      const elements = Array.from(
+        document.body.querySelectorAll("*")
+      ) as HTMLElement[];
+      obstaclesRef.current = elements
+        .filter((el) => {
+          if (el === canvasEl) return false;
+          const rect = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          const fontSize = parseFloat(style.fontSize);
+          return rect.width > 40 || rect.height > 40 || fontSize > 16;
+        })
+        .map((el) => el.getBoundingClientRect());
     };
     updateObstacles();
 
@@ -334,35 +355,20 @@ export default function RoombaSimulation() {
 
       // Draw world map
       ctx.strokeStyle = "rgba(0, 150, 150, 0.3)";
-      ctx.lineWidth = 1;
-      
-      WORLD_MAP.forEach(continent => {
+      ctx.lineWidth = 0.5;
+      ctx.fillStyle = "rgba(0, 100, 100, 0.1)";
+
+      worldDataRef.current.forEach((polygon) => {
         ctx.beginPath();
-        continent.points.forEach((point, i) => {
-          const x = point[0] * canvas.width;
-          const y = point[1] * canvas.height;
-          if (i === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
+        polygon.forEach((point, i) => {
+          const x = ((point[0] + 180) / 360) * canvas.width;
+          const y = ((90 - point[1]) / 180) * canvas.height;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         });
         ctx.closePath();
-        
-        // Fill continents with subtle color
-        ctx.fillStyle = "rgba(0, 100, 100, 0.1)";
         ctx.fill();
         ctx.stroke();
-        
-        // Draw continent labels
-        if (continent.points[0]) {
-          const centerX = continent.points.reduce((sum, p) => sum + p[0], 0) / continent.points.length * canvas.width;
-          const centerY = continent.points.reduce((sum, p) => sum + p[1], 0) / continent.points.length * canvas.height;
-          ctx.fillStyle = "rgba(0, 200, 200, 0.3)";
-          ctx.font = "10px monospace";
-          ctx.textAlign = "center";
-          ctx.fillText(continent.name.toUpperCase(), centerX, centerY);
-        }
       });
       
       // Draw major cities as points
@@ -399,12 +405,18 @@ export default function RoombaSimulation() {
         }
       });
       
-      // Draw grid overlay for heat map effect
+      // Draw explored areas and heat map overlay
       gridRef.current.forEach((cell, key) => {
         const [gx, gy] = key.split(",").map(Number);
         const x = gx * GRID_SIZE;
         const y = gy * GRID_SIZE;
-        
+
+        if (cell.explored > 0) {
+          const alpha = cell.explored * 0.3;
+          ctx.fillStyle = `rgba(0, 255, 150, ${alpha})`;
+          ctx.fillRect(x, y, GRID_SIZE, GRID_SIZE);
+        }
+
         if (cell.heat > 0) {
           const alpha = cell.heat * 0.15;
           ctx.fillStyle = `rgba(255, 100, 200, ${alpha})`;
@@ -572,8 +584,8 @@ export default function RoombaSimulation() {
         robot.vy *= 0.92;
 
         // Boundary constraints
-        robot.x = Math.max(20, Math.min(canvas.width - 20, robot.x));
-        robot.y = Math.max(20, Math.min(canvas.height - 20, robot.y));
+        robot.x = Math.max(15, Math.min(canvas.width - 15, robot.x));
+        robot.y = Math.max(15, Math.min(canvas.height - 15, robot.y));
 
         // Update path history
         if (Math.random() < 0.3) { // Reduce path update frequency for cleaner trails
@@ -666,20 +678,20 @@ export default function RoombaSimulation() {
         // Highlight selected robot
         if (robot.id === selectedRobotRef.current) {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(0, 0, 30, 0, Math.PI * 2);
+          ctx.arc(0, 0, 20, 0, Math.PI * 2);
           ctx.stroke();
-          
+
           // Draw selection indicator
           const pulseScale = 1 + Math.sin(Date.now() * 0.005) * 0.1;
           ctx.save();
           ctx.scale(pulseScale, pulseScale);
           ctx.strokeStyle = robot.color;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 1.5;
           ctx.setLineDash([5, 5]);
           ctx.beginPath();
-          ctx.arc(0, 0, 35, 0, Math.PI * 2);
+          ctx.arc(0, 0, 25, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.restore();
@@ -700,14 +712,14 @@ export default function RoombaSimulation() {
           ctx.strokeStyle = robot.color;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(0, 0, 25, 0, Math.PI * 2);
+          ctx.arc(0, 0, 15, 0, Math.PI * 2);
           ctx.stroke();
         } else if (robot.role === "scout") {
           ctx.strokeStyle = `${robot.color}66`;
           ctx.lineWidth = 1;
           ctx.setLineDash([5, 5]);
           ctx.beginPath();
-          ctx.arc(0, 0, 20, 0, Math.PI * 2);
+          ctx.arc(0, 0, 12, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -718,25 +730,25 @@ export default function RoombaSimulation() {
         // Shadow effect
         ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
         ctx.beginPath();
-        ctx.moveTo(13, 2);
-        ctx.lineTo(-8, -6);
-        ctx.lineTo(-8, 10);
+        ctx.moveTo(8, 1);
+        ctx.lineTo(-5, -4);
+        ctx.lineTo(-5, 6);
         ctx.closePath();
         ctx.fill();
         
         // Main body
         ctx.fillStyle = robot.color;
         ctx.beginPath();
-        ctx.moveTo(12, 0);
-        ctx.lineTo(-8, -7);
-        ctx.lineTo(-8, 7);
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-5, -4);
+        ctx.lineTo(-5, 4);
         ctx.closePath();
         ctx.fill();
 
         // Direction indicator
         ctx.fillStyle = "#fff";
         ctx.beginPath();
-        ctx.arc(3, 0, 3, 0, Math.PI * 2);
+        ctx.arc(2, 0, 2, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
@@ -744,7 +756,7 @@ export default function RoombaSimulation() {
         // Draw path trail (thinner and more subtle)
         if (robot.path.length > 1) {
           ctx.strokeStyle = `${robot.color}22`;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1;
           ctx.beginPath();
           robot.path.forEach((point, i) => {
             if (i === 0) {
