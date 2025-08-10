@@ -4,120 +4,147 @@ import { useEffect, useRef, useState } from "react";
 interface Robot {
   x: number;
   y: number;
-  angle: number;
+  vx: number;
+  vy: number;
+  reached: boolean;
 }
 
-interface Target {
-  x: number;
-  y: number;
-}
+const MAX_SPEED = 2;
+const ACCEL = 0.05;
+const TARGET_RADIUS = 12;
 
-const NUM_ROBOTS = 20;
-const ROBOT_SPEED = 1.5;
-const ROBOT_RADIUS = 5;
-const TARGET_RADIUS = 10;
 
 export default function SwarmGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const robotsRef = useRef<Robot[]>([]);
-  const targetsRef = useRef<Target[]>([]);
-  const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60);
+
+  const targetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const animationRef = useRef<number>();
+  const runningRef = useRef(false);
+  const startRef = useRef(0);
+  const [time, setTime] = useState(0);
+  const [bestTime, setBestTime] = useState<number | null>(null);
+  const [count, setCount] = useState(15);
+
+  // initialize robots when count changes
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
-    canvas.width = window.innerWidth;
-    canvas.height = 500;
-
-    robotsRef.current = Array.from({ length: NUM_ROBOTS }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      angle: Math.random() * Math.PI * 2,
+    const { width, height } = canvas;
+    robotsRef.current = Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: 0,
+      vy: 0,
+      reached: false,
     }));
+    targetRef.current = { x: width / 2, y: height / 2 };
+    runningRef.current = false;
+    setTime(0);
+  }, [count]);
 
-    const handleClick = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      targetsRef.current.push({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-    };
-    canvas.addEventListener("click", handleClick);
+  // animation loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    const update = () => {
+    const step = (timestamp: number) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = "gold";
-      targetsRef.current.forEach((t) => {
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, TARGET_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
+      // update robots
+      let allReached = true;
       robotsRef.current.forEach((r) => {
-        if (targetsRef.current.length > 0) {
-          const target = targetsRef.current.reduce((prev, cur) => {
-            const prevDist = Math.hypot(prev.x - r.x, prev.y - r.y);
-            const curDist = Math.hypot(cur.x - r.x, cur.y - r.y);
-            return curDist < prevDist ? cur : prev;
-          }, targetsRef.current[0]);
-          const angle = Math.atan2(target.y - r.y, target.x - r.x);
-          r.x += Math.cos(angle) * ROBOT_SPEED;
-          r.y += Math.sin(angle) * ROBOT_SPEED;
-          if (Math.hypot(target.x - r.x, target.y - r.y) < TARGET_RADIUS) {
-            targetsRef.current = targetsRef.current.filter((t) => t !== target);
-            setScore((s) => s + 1);
+        if (!r.reached) {
+          const dx = targetRef.current.x - r.x;
+          const dy = targetRef.current.y - r.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < TARGET_RADIUS) {
+            r.reached = true;
+            r.vx = r.vy = 0;
+          } else {
+            allReached = false;
+            r.vx += (dx / dist) * ACCEL + (Math.random() - 0.5) * ACCEL;
+            r.vy += (dy / dist) * ACCEL + (Math.random() - 0.5) * ACCEL;
+            const speed = Math.hypot(r.vx, r.vy);
+            if (speed > MAX_SPEED) {
+              r.vx = (r.vx / speed) * MAX_SPEED;
+              r.vy = (r.vy / speed) * MAX_SPEED;
+            }
+            r.x += r.vx;
+            r.y += r.vy;
           }
-        } else {
-          r.x += Math.cos(r.angle) * ROBOT_SPEED;
-          r.y += Math.sin(r.angle) * ROBOT_SPEED;
         }
-        if (r.x < 0 || r.x > canvas.width) r.angle = Math.PI - r.angle;
-        if (r.y < 0 || r.y > canvas.height) r.angle = -r.angle;
-
-        ctx.fillStyle = "teal";
+        // draw robot
+        ctx.fillStyle = r.reached ? "#16a34a" : "#0ea5e9";
         ctx.beginPath();
-        ctx.arc(r.x, r.y, ROBOT_RADIUS, 0, Math.PI * 2);
+        ctx.arc(r.x, r.y, 5, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      animationRef.current = requestAnimationFrame(update);
+      // draw target
+      ctx.strokeStyle = "#dc2626";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(targetRef.current.x, targetRef.current.y, TARGET_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (runningRef.current && !allReached) {
+        setTime((timestamp - startRef.current) / 1000);
+      }
+
+      if (runningRef.current && allReached) {
+        runningRef.current = false;
+        const final = (timestamp - startRef.current) / 1000;
+        setTime(final);
+        setBestTime((prev) => (prev === null || final < prev ? final : prev));
+      }
+
+      animationRef.current = requestAnimationFrame(step);
     };
 
-    const animationRef = { current: 0 };
-    update();
-
-    const timer = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          cancelAnimationFrame(animationRef.current);
-          clearInterval(timer);
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-
+    animationRef.current = requestAnimationFrame(step);
     return () => {
-      canvas.removeEventListener("click", handleClick);
-      cancelAnimationFrame(animationRef.current);
-      clearInterval(timer);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);
 
+  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    targetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    robotsRef.current.forEach((r) => (r.reached = false));
+    runningRef.current = true;
+    startRef.current = performance.now();
+    setTime(0);
+  };
+
   return (
-    <div className="relative">
-      <canvas ref={canvasRef} className="w-full border border-gray-300" />
-      <div className="absolute top-2 left-2 rounded bg-white/80 px-2 py-1 text-sm">
-        Score: {score} • Time: {timeLeft}
+    <div className="flex flex-col items-center">
+      <canvas
+        ref={canvasRef}
+        width={600}
+        height={400}
+        onClick={handleClick}
+        className="border border-gray-300 bg-white"
+      />
+      <div className="mt-4 flex items-center space-x-3">
+        <label className="text-sm">Robots: {count}</label>
+        <input
+          type="range"
+          min={5}
+          max={50}
+          value={count}
+          onChange={(e) => setCount(parseInt(e.target.value))}
+        />
       </div>
-      <p className="mt-2 text-sm text-gray-700">
-        Click inside the arena to drop targets for the robots to collect.
-      </p>
+      <div className="mt-2 text-sm">
+        Time: {time.toFixed(1)}s{bestTime !== null && ` (Best: ${bestTime.toFixed(1)}s)`}
+      </div>
+      <p className="mt-2 text-xs text-gray-500">Click canvas to set target and gather the swarm.</p>
     </div>
   );
 }
