@@ -19,7 +19,7 @@ export default function SwarmGame() {
   const robotsRef = useRef<Robot[]>([]);
 
   const targetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
   const runningRef = useRef(false);
   const startRef = useRef(0);
   const [time, setTime] = useState(0);
