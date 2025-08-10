@@ -97,6 +97,18 @@ export default function RoombaSimulation() {
   const [highScore, setHighScore] = useState(0);
   const highScoreRef = useRef(0);
   const totalCellsRef = useRef(0);
+  const exploredCellsRef = useRef(0);
+  const startTimeRef = useRef(0);
+  const bestTimeRef = useRef<number | null>(null);
+  const [gameStats, setGameStats] = useState<{
+    coverage: number;
+    time: number;
+    best: number | null;
+  }>({
+    coverage: 0,
+    time: 0,
+    best: null,
+  });
 
   useEffect(() => {
     const stored = Number(localStorage.getItem("roombaHighScore") || 0);
