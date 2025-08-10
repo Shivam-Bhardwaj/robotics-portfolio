@@ -13,9 +13,11 @@ const MAX_SPEED = 2;
 const ACCEL = 0.05;
 const TARGET_RADIUS = 12;
 
+
 export default function SwarmGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const robotsRef = useRef<Robot[]>([]);
+
   const targetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const animationRef = useRef<number>();
   const runningRef = useRef(false);
@@ -25,6 +27,7 @@ export default function SwarmGame() {
   const [count, setCount] = useState(15);
 
   // initialize robots when count changes
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;

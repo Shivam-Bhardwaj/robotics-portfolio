@@ -11,6 +11,7 @@ export default function SwarmPage() {
       </p>
       <SwarmGame />
     </div>
+
   );
 }
 
