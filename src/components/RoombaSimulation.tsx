@@ -91,11 +91,19 @@ export default function RoombaSimulation() {
   const initializedRef = useRef(false);
   const selectedRobotRef = useRef<number>(0);
   const telemetryRef = useRef<HTMLDivElement>(null);
-  const exploredCellsRef = useRef(0);
+
+  const [score, setScore] = useState(0);
+  const scoreRef = useRef(0);
+  const [highScore, setHighScore] = useState(0);
+  const highScoreRef = useRef(0);
   const totalCellsRef = useRef(0);
-  const startTimeRef = useRef(Date.now());
-  const bestTimeRef = useRef<number | null>(null);
-  const [gameStats, setGameStats] = useState({ coverage: 0, time: 0, best: null as number | null });
+
+  useEffect(() => {
+    const stored = Number(localStorage.getItem("roombaHighScore") || 0);
+    highScoreRef.current = stored;
+    setHighScore(stored);
+  }, []);
+
 
   // Initialize robots only once
   useEffect(() => {
@@ -104,6 +112,8 @@ export default function RoombaSimulation() {
 
     const width = window.innerWidth;
     const height = window.innerHeight;
+    totalCellsRef.current =
+      Math.ceil(width / GRID_SIZE) * Math.ceil(height / GRID_SIZE);
 
     const colors = [
       "#00ffff", "#ff00ff", "#ffff00", "#00ff00",
@@ -249,12 +259,25 @@ export default function RoombaSimulation() {
     const updateGrid = (x: number, y: number, explored: boolean = true) => {
       const key = getGridKey(x, y);
       const cell = gridRef.current.get(key) || { explored: 0, obstacle: false, heat: 0 };
+      const wasUnexplored = cell.explored === 0;
       if (explored) {
         if (cell.explored === 0) {
           exploredCellsRef.current += 1;
         }
         cell.explored = Math.min(cell.explored + 0.01, 1);
         cell.heat = 1;
+        if (wasUnexplored) {
+          scoreRef.current += 1;
+          setScore(scoreRef.current);
+          if (scoreRef.current > highScoreRef.current) {
+            highScoreRef.current = scoreRef.current;
+            setHighScore(highScoreRef.current);
+            localStorage.setItem(
+              "roombaHighScore",
+              String(highScoreRef.current)
+            );
+          }
+        }
       }
       gridRef.current.set(key, cell);
     };
@@ -828,6 +851,8 @@ export default function RoombaSimulation() {
       totalCellsRef.current =
         Math.ceil(canvas.width / GRID_SIZE) * Math.ceil(canvas.height / GRID_SIZE);
       updateObstacles();
+      totalCellsRef.current =
+        Math.ceil(canvas.width / GRID_SIZE) * Math.ceil(canvas.height / GRID_SIZE);
     };
     window.addEventListener("resize", handleResize);
 
@@ -936,6 +961,10 @@ export default function RoombaSimulation() {
         <div>GLOBAL ROBOTICS NETWORK v2.0</div>
         <div>Click robot for telemetry</div>
         <div>{NUM_ROBOTS} agents | {MAJOR_CITIES.length} nodes</div>
+        <div>
+          Coverage: {((score / (totalCellsRef.current || 1)) * 100).toFixed(1)}%
+          {" "}| High: {((highScore / (totalCellsRef.current || 1)) * 100).toFixed(1)}%
+        </div>
         <div>Real-time worldwide coordination</div>
       </div>
     </>
