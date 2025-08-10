@@ -91,6 +91,7 @@ export default function RoombaSimulation() {
   const initializedRef = useRef(false);
   const selectedRobotRef = useRef<number>(0);
   const telemetryRef = useRef<HTMLDivElement>(null);
+
   const [score, setScore] = useState(0);
   const scoreRef = useRef(0);
   const [highScore, setHighScore] = useState(0);
@@ -102,6 +103,7 @@ export default function RoombaSimulation() {
     highScoreRef.current = stored;
     setHighScore(stored);
   }, []);
+
 
   // Initialize robots only once
   useEffect(() => {
@@ -244,6 +246,9 @@ export default function RoombaSimulation() {
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    totalCellsRef.current =
+      Math.ceil(canvas.width / GRID_SIZE) * Math.ceil(canvas.height / GRID_SIZE);
+    startTimeRef.current = Date.now();
 
     const getGridKey = (x: number, y: number) => {
       const gx = Math.floor(x / GRID_SIZE);
@@ -256,6 +261,9 @@ export default function RoombaSimulation() {
       const cell = gridRef.current.get(key) || { explored: 0, obstacle: false, heat: 0 };
       const wasUnexplored = cell.explored === 0;
       if (explored) {
+        if (cell.explored === 0) {
+          exploredCellsRef.current += 1;
+        }
         cell.explored = Math.min(cell.explored + 0.01, 1);
         cell.heat = 1;
         if (wasUnexplored) {
@@ -840,6 +848,8 @@ export default function RoombaSimulation() {
     const handleResize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      totalCellsRef.current =
+        Math.ceil(canvas.width / GRID_SIZE) * Math.ceil(canvas.height / GRID_SIZE);
       updateObstacles();
       totalCellsRef.current =
         Math.ceil(canvas.width / GRID_SIZE) * Math.ceil(canvas.height / GRID_SIZE);
@@ -856,6 +866,40 @@ export default function RoombaSimulation() {
       }
     };
   }, []); // Empty dependency array - only runs once
+
+  // Game stats update and best time tracking
+  useEffect(() => {
+    const stored = localStorage.getItem("swarmBestTime");
+    if (stored) {
+      bestTimeRef.current = parseFloat(stored);
+      setGameStats((s) => ({ ...s, best: bestTimeRef.current }));
+    }
+    const interval = setInterval(() => {
+      const coverage = totalCellsRef.current
+        ? (exploredCellsRef.current / totalCellsRef.current) * 100
+        : 0;
+      const time = (Date.now() - startTimeRef.current) / 1000;
+      if (coverage >= 100 && (!bestTimeRef.current || time < bestTimeRef.current)) {
+        bestTimeRef.current = time;
+        localStorage.setItem("swarmBestTime", bestTimeRef.current.toString());
+      }
+      setGameStats({ coverage, time, best: bestTimeRef.current });
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Reset simulation with 'R'
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "r") {
+        gridRef.current.clear();
+        exploredCellsRef.current = 0;
+        startTimeRef.current = Date.now();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
 
   // Telemetry display update
   useEffect(() => {
@@ -905,6 +949,14 @@ export default function RoombaSimulation() {
         className="fixed bottom-4 right-4 bg-white/80 text-gray-800 backdrop-blur-sm border border-cyan-600/30 rounded-lg p-4 pointer-events-none z-50"
         style={{ minWidth: "320px" }}
       />
+      <div className="fixed top-4 left-4 font-mono text-xs text-cyan-700/70 pointer-events-none z-50">
+        <div>Coverage: {gameStats.coverage.toFixed(1)}%</div>
+        <div>Time: {gameStats.time.toFixed(1)}s</div>
+        {gameStats.best !== null && (
+          <div>Best: {gameStats.best.toFixed(1)}s</div>
+        )}
+        <div>Press &apos;R&apos; to reset</div>
+      </div>
       <div className="fixed bottom-4 left-4 font-mono text-xs text-cyan-700/70 pointer-events-none z-50">
         <div>GLOBAL ROBOTICS NETWORK v2.0</div>
         <div>Click robot for telemetry</div>
