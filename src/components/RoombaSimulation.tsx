@@ -1,5 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { Vector2, PIDController, KalmanFilter } from "@/lib/robotics/math";
+import { AStarPlanner, EKFSLAMFilter, ParticleFilter, FlockingBehavior } from "@/lib/robotics/algorithms";
+import { LidarSensor, IMUSensor, GPSSensor, SensorFusion } from "@/lib/robotics/sensors";
 
 const NUM_ROBOTS = 12;
 const ROBOT_SPEED = 1.8;
@@ -10,6 +13,11 @@ const COMMUNICATION_RADIUS = 150;
 const FORMATION_RADIUS = 80;
 const PARTICLE_COUNT = 50;
 const LIDAR_RAYS = 16;
+
+// Advanced robotics parameters
+const SLAM_UPDATE_RATE = 5; // Hz
+const PATHPLAN_UPDATE_RATE = 2; // Hz
+const SENSOR_FUSION_RATE = 20; // Hz
 
 // Major cities for initial robot distribution
 const MAJOR_CITIES = [
@@ -46,7 +54,7 @@ interface Waypoint {
   timestamp: number;
 }
 
-interface Robot {
+interface AdvancedRobot {
   x: number;
   y: number;
   vx: number;
@@ -71,6 +79,42 @@ interface Robot {
   networkLatency: number;
   lastUpdate: number;
   confidence: number;
+  
+  // Advanced robotics components
+  lidarSensor: LidarSensor;
+  imuSensor: IMUSensor;
+  gpsSensor: GPSSensor;
+  sensorFusion: SensorFusion;
+  slamFilter: EKFSLAMFilter;
+  particleFilter: ParticleFilter;
+  pathPlanner: AStarPlanner;
+  pidController: {
+    x: PIDController;
+    y: PIDController;
+    heading: PIDController;
+  };
+  flockingBehavior: FlockingBehavior;
+  
+  // SLAM and localization
+  mapData: Map<string, { explored: boolean; obstacle: boolean; probability: number }>;
+  landmarks: Array<{ id: number; position: Vector2; confidence: number }>;
+  pose: { x: number; y: number; theta: number; covariance: number[][] };
+  
+  // Path planning
+  plannedPath: Vector2[];
+  currentWaypoint: number;
+  pathPlanningMode: "astar" | "rrt" | "potential_field";
+  
+  // Control system
+  controlMode: "manual" | "autonomous" | "formation";
+  targetPose: { x: number; y: number; theta: number };
+  
+  // Performance metrics
+  distanceTraveled: number;
+  explorationEfficiency: number;
+  energyConsumption: number;
+  missionTime: number;
+  collisionCount: number;
 }
 
 interface GridCell {
@@ -80,10 +124,12 @@ interface GridCell {
 }
 
 export default function RoombaSimulation() {
+  const [isClient, setIsClient] = useState(false);
+  const [robotsInitialized, setRobotsInitialized] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
   const prevMouseRef = useRef({ x: 0, y: 0 });
-  const robotsRef = useRef<Robot[]>([]);
+  const robotsRef = useRef<AdvancedRobot[]>([]);
   const gridRef = useRef<Map<string, GridCell>>(new Map());
   const worldDataRef = useRef<[number, number][][]>([]);
   const animationRef = useRef<number | undefined>(undefined);
@@ -96,9 +142,20 @@ export default function RoombaSimulation() {
   const scoreRef = useRef(0);
   const [highScore, setHighScore] = useState(0);
   const highScoreRef = useRef(0);
+  const [gameStats, setGameStats] = useState({
+    coverage: 0,
+    time: 0,
+    best: null as number | null
+  });
   const totalCellsRef = useRef(0);
 
+  // Set client flag after mount
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const stored = Number(localStorage.getItem("roombaHighScore") || 0);
     highScoreRef.current = stored;
     setHighScore(stored);
@@ -107,11 +164,15 @@ export default function RoombaSimulation() {
 
   // Initialize robots only once
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
     if (initializedRef.current) return;
-    initializedRef.current = true;
+    
+    try {
+      initializedRef.current = true;
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const width = typeof window !== 'undefined' ? window.innerWidth : 1920;
+    const height = typeof window !== 'undefined' ? window.innerHeight : 1080;
     totalCellsRef.current =
       Math.ceil(width / GRID_SIZE) * Math.ceil(height / GRID_SIZE);
 
@@ -168,6 +229,25 @@ export default function RoombaSimulation() {
       const x = city.x * width + (Math.random() - 0.5) * 50;
       const y = city.y * height + (Math.random() - 0.5) * 50;
       
+      // Initialize advanced robotics components
+      const lidarSensor = new LidarSensor(SCAN_RADIUS, 1.0, 10, 0.05);
+      const imuSensor = new IMUSensor(0.1, 0.01, 0.5, 100);
+      const gpsSensor = new GPSSensor(3.0, 1.0, 1);
+      const sensorFusion = new SensorFusion();
+      const slamFilter = new EKFSLAMFilter({ x, y, theta: 0 });
+      const particleFilter = new ParticleFilter(PARTICLE_COUNT, { 
+        minX: 0, maxX: width, minY: 0, maxY: height 
+      });
+      const pathPlanner = new AStarPlanner(width, height, 20);
+      const flockingBehavior = new FlockingBehavior(30, 60, 80, 2.0, 1.0, 1.0);
+      
+      // Initialize PID controllers
+      const pidController = {
+        x: new PIDController(2.0, 0.1, 0.5),
+        y: new PIDController(2.0, 0.1, 0.5),
+        heading: new PIDController(3.0, 0.2, 0.8)
+      };
+      
       return {
         x,
         y,
@@ -193,12 +273,53 @@ export default function RoombaSimulation() {
         networkLatency: Math.random() * 50 + 10, // 10-60ms
         lastUpdate: Date.now(),
         confidence: Math.random() * 0.3 + 0.7, // 0.7-1.0
+        
+        // Advanced robotics components
+        lidarSensor,
+        imuSensor,
+        gpsSensor,
+        sensorFusion,
+        slamFilter,
+        particleFilter,
+        pathPlanner,
+        pidController,
+        flockingBehavior,
+        
+        // SLAM and localization
+        mapData: new Map(),
+        landmarks: [],
+        pose: { 
+          x, y, theta: 0, 
+          covariance: [[1, 0, 0], [0, 1, 0], [0, 0, 0.1]] 
+        },
+        
+        // Path planning
+        plannedPath: [],
+        currentWaypoint: 0,
+        pathPlanningMode: "astar" as const,
+        
+        // Control system
+        controlMode: "autonomous" as const,
+        targetPose: { x: width / 2, y: height / 2, theta: 0 },
+        
+        // Performance metrics
+        distanceTraveled: 0,
+        explorationEfficiency: 0,
+        energyConsumption: 0,
+        missionTime: 0,
+        collisionCount: 0
       };
     });
 
     // Set initial mouse position
     mouseRef.current = { x: width / 2, y: height / 2 };
     prevMouseRef.current = { x: width / 2, y: height / 2 };
+    
+    // Signal that robots are initialized
+    setRobotsInitialized(true);
+    } catch (error) {
+      console.error('RoombaSimulation initialization error:', error);
+    }
   }, []);
 
   // Handle mouse movement and clicks separately
@@ -229,23 +350,32 @@ export default function RoombaSimulation() {
       selectedRobotRef.current = closestRobot;
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("click", handleClick);
+    if (typeof window !== 'undefined') {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("click", handleClick);
+    }
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("click", handleClick);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("click", handleClick);
+      }
     };
   }, []);
 
   // Main animation loop
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    // Only run on client side and after robots are initialized
+    if (typeof window === 'undefined') return;
+    if (!isClient || !robotsInitialized) return;
+    
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = typeof window !== 'undefined' ? window.innerWidth : 1920;
+    canvas.height = typeof window !== 'undefined' ? window.innerHeight : 1080;
     totalCellsRef.current =
       Math.ceil(canvas.width / GRID_SIZE) * Math.ceil(canvas.height / GRID_SIZE);
     startTimeRef.current = Date.now();
@@ -272,10 +402,12 @@ export default function RoombaSimulation() {
           if (scoreRef.current > highScoreRef.current) {
             highScoreRef.current = scoreRef.current;
             setHighScore(highScoreRef.current);
-            localStorage.setItem(
-              "roombaHighScore",
-              String(highScoreRef.current)
-            );
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(
+                "roombaHighScore",
+                String(highScoreRef.current)
+              );
+            }
           }
         }
       }
@@ -296,17 +428,28 @@ export default function RoombaSimulation() {
       return false;
     };
 
+    const calculateEigenvalues = (a: number, b: number, c: number) => {
+      // Calculate eigenvalues of 2x2 covariance matrix [[a, b], [b, c]]
+      const trace = a + c;
+      const det = a * c - b * b;
+      const discriminant = Math.sqrt(Math.max(0, trace * trace - 4 * det));
+      return {
+        max: (trace + discriminant) / 2,
+        min: (trace - discriminant) / 2
+      };
+    };
+
     const updateObstacles = () => {
       if (!canvasRef.current) return;
       const canvasEl = canvasRef.current;
-      const elements = Array.from(
-        document.body.querySelectorAll("*")
-      ) as HTMLElement[];
+      const elements = typeof document !== 'undefined' 
+        ? Array.from(document.body.querySelectorAll("*")) as HTMLElement[]
+        : [];
       obstaclesRef.current = elements
         .filter((el) => {
           if (el === canvasEl) return false;
           const rect = el.getBoundingClientRect();
-          const style = window.getComputedStyle(el);
+          const style = typeof window !== 'undefined' ? window.getComputedStyle(el) : { fontSize: '16px' };
           const fontSize = parseFloat(style.fontSize);
           return rect.width > 40 || rect.height > 40 || fontSize > 16;
         })
@@ -320,67 +463,216 @@ export default function RoombaSimulation() {
       return Math.sqrt(dx * dx + dy * dy);
     };
 
-    const updateSensorData = (robot: Robot) => {
-      // Simulate LIDAR readings
-      for (let i = 0; i < LIDAR_RAYS; i++) {
-        const rayAngle = robot.angle + (i / LIDAR_RAYS) * Math.PI * 2 - Math.PI;
-        const rayX = robot.x + Math.cos(rayAngle) * SCAN_RADIUS;
-        const rayY = robot.y + Math.sin(rayAngle) * SCAN_RADIUS;
-        
-        // Check for obstacles in ray path
-        let distance = SCAN_RADIUS;
-        if (checkObstacleCollision(rayX, rayY, 5)) {
-          distance = Math.random() * SCAN_RADIUS * 0.5 + 20;
-        }
-        robot.sensors.lidar[i] = distance;
-      }
+    const updateAdvancedSensorData = (robot: AdvancedRobot) => {
+      // Simulate realistic LiDAR scanning
+      const obstacles = obstaclesRef.current.map(rect => ({
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height
+      }));
       
-      // Update IMU data based on velocity changes
-      robot.sensors.imu.ax = (robot.vx - robot.sensors.odometry.dx) * 10;
-      robot.sensors.imu.ay = (robot.vy - robot.sensors.odometry.dy) * 10;
-      robot.sensors.imu.gz = (robot.angle - robot.sensors.odometry.dtheta) * 5;
+      const lidarPoints = robot.lidarSensor.simulate(
+        new Vector2(robot.x, robot.y),
+        robot.angle,
+        obstacles
+      );
       
-      // Update odometry
+      // Update legacy sensor data for compatibility
+      robot.sensors.lidar = lidarPoints.map(p => p.distance).slice(0, LIDAR_RAYS);
+      
+      // Simulate IMU with realistic physics
+      const acceleration = new Vector3(
+        (robot.vx - robot.sensors.odometry.dx) * 10,
+        (robot.vy - robot.sensors.odometry.dy) * 10,
+        0
+      );
+      const angularVelocity = new Vector3(0, 0, robot.angle - robot.sensors.odometry.dtheta);
+      
+      const imuReading = robot.imuSensor.simulate(
+        acceleration,
+        angularVelocity,
+        { w: 1, x: 0, y: 0, z: 0 } // Simplified quaternion
+      );
+      
+      // Simulate GPS with realistic noise and accuracy
+      const gpsReading = robot.gpsSensor.simulate(
+        new Vector2(robot.x, robot.y),
+        Math.floor(Math.random() * 4) + 6, // 6-10 satellites
+        1.0 + Math.random() * 0.5 // atmospheric conditions
+      );
+      
+      // Update sensor fusion
+      const sensorReadings = new Map();
+      sensorReadings.set('imu', imuReading);
+      sensorReadings.set('gps', gpsReading);
+      
+      const fusedState = robot.sensorFusion.fuseReadings(sensorReadings);
+      
+      // Update pose estimate
+      robot.pose.x = fusedState.position.x;
+      robot.pose.y = fusedState.position.y;
+      robot.confidence = fusedState.confidence;
+      
+      // Update legacy sensor data
+      robot.sensors.imu.ax = imuReading.acceleration.x;
+      robot.sensors.imu.ay = imuReading.acceleration.y;
+      robot.sensors.imu.gz = imuReading.angularVelocity.z;
       robot.sensors.odometry.dx = robot.vx;
       robot.sensors.odometry.dy = robot.vy;
       robot.sensors.odometry.dtheta = robot.angle;
-      
-      // Update GPS with noise
-      robot.sensors.gps.x = robot.x + (Math.random() - 0.5) * robot.sensors.gps.accuracy;
-      robot.sensors.gps.y = robot.y + (Math.random() - 0.5) * robot.sensors.gps.accuracy;
+      robot.sensors.gps.x = gpsReading.latitude;
+      robot.sensors.gps.y = gpsReading.longitude;
+      robot.sensors.gps.accuracy = gpsReading.accuracy;
     };
 
-    const updateParticleFilter = (robot: Robot) => {
-      // Particle filter update for localization
-      robot.particles.forEach(particle => {
-        // Prediction step
-        particle.x += robot.vx + (Math.random() - 0.5) * 2;
-        particle.y += robot.vy + (Math.random() - 0.5) * 2;
-        particle.angle += (robot.angle - robot.sensors.odometry.dtheta) + (Math.random() - 0.5) * 0.1;
-        
-        // Update weights based on sensor data
-        const dx = particle.x - robot.sensors.gps.x;
-        const dy = particle.y - robot.sensors.gps.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        particle.weight = Math.exp(-distance / 100);
-      });
+    const updateAdvancedParticleFilter = (robot: AdvancedRobot) => {
+      // Advanced particle filter with realistic sensor fusion
+      robot.particleFilter.predict(
+        Math.sqrt(robot.vx * robot.vx + robot.vy * robot.vy),
+        robot.angle - robot.sensors.odometry.dtheta,
+        0.1 // delta time
+      );
       
-      // Normalize weights
-      const totalWeight = robot.particles.reduce((sum, p) => sum + p.weight, 0);
-      if (totalWeight > 0) {
-        robot.particles.forEach(p => p.weight /= totalWeight);
+      // Update with GPS measurement
+      if (robot.sensors.gps.accuracy < 10) {
+        robot.particleFilter.update({
+          x: robot.sensors.gps.x,
+          y: robot.sensors.gps.y,
+          uncertainty: robot.sensors.gps.accuracy
+        });
       }
       
-      // Resample particles with low weights
-      const threshold = 1 / (PARTICLE_COUNT * 2);
-      robot.particles.forEach(particle => {
-        if (particle.weight < threshold) {
-          particle.x = robot.x + (Math.random() - 0.5) * 50;
-          particle.y = robot.y + (Math.random() - 0.5) * 50;
-          particle.angle = robot.angle + (Math.random() - 0.5) * 0.5;
-          particle.weight = 1 / PARTICLE_COUNT;
+      const estimate = robot.particleFilter.getEstimate();
+      robot.pose.x = estimate.x;
+      robot.pose.y = estimate.y;
+      robot.pose.theta = estimate.theta;
+      robot.confidence = estimate.confidence;
+      
+      // Update legacy particles for visualization
+      const newParticles = robot.particleFilter.getParticles();
+      robot.particles = newParticles.map(p => ({
+        x: p.x,
+        y: p.y,
+        angle: p.theta,
+        weight: p.weight
+      }));
+    };
+
+    const updateSLAM = (robot: AdvancedRobot) => {
+      // Predict SLAM state
+      robot.slamFilter.predict(
+        Math.sqrt(robot.vx * robot.vx + robot.vy * robot.vy),
+        (robot.angle - robot.sensors.odometry.dtheta) / 0.1,
+        0.1
+      );
+      
+      // Create observations from LiDAR data
+      const observations: Array<{range: number; bearing: number; landmarkId?: number}> = [];
+      robot.sensors.lidar.forEach((distance, i) => {
+        if (distance < SCAN_RADIUS * 0.8) {
+          const bearing = (i / LIDAR_RAYS) * Math.PI * 2 - Math.PI;
+          observations.push({ range: distance, bearing });
         }
       });
+      
+      // Update SLAM with observations
+      if (observations.length > 0) {
+        robot.slamFilter.update(observations);
+      }
+      
+      // Update robot pose from SLAM
+      const slamPose = robot.slamFilter.getPose();
+      robot.pose.x = slamPose.x;
+      robot.pose.y = slamPose.y;
+      robot.pose.theta = slamPose.theta;
+      
+      // Update landmarks
+      robot.landmarks = robot.slamFilter.getLandmarks().map(landmark => ({
+        id: landmark.id,
+        position: landmark.position,
+        confidence: 1 / Math.sqrt(landmark.covariance[0][0] + landmark.covariance[1][1])
+      }));
+    };
+
+    const updatePathPlanning = (robot: AdvancedRobot) => {
+      // Update obstacles for path planner
+      const obstacles = obstaclesRef.current.map(rect => ({
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height
+      }));
+      
+      robot.pathPlanner.updateObstacles(obstacles);
+      
+      // Plan path to target if needed
+      if (robot.plannedPath.length === 0 || robot.currentWaypoint >= robot.plannedPath.length) {
+        const start = new Vector2(robot.x, robot.y);
+        const goal = new Vector2(robot.targetPose.x, robot.targetPose.y);
+        
+        switch (robot.pathPlanningMode) {
+          case "astar":
+            const path = robot.pathPlanner.findPath(start, goal);
+            if (path) {
+              robot.plannedPath = path;
+              robot.currentWaypoint = 0;
+            }
+            break;
+        }
+      }
+      
+      // Update current waypoint
+      if (robot.plannedPath.length > 0 && robot.currentWaypoint < robot.plannedPath.length) {
+        const currentTarget = robot.plannedPath[robot.currentWaypoint];
+        const distance = new Vector2(robot.x, robot.y).distanceTo(currentTarget);
+        
+        if (distance < 20) {
+          robot.currentWaypoint++;
+        }
+      }
+    };
+
+    const updatePIDControl = (robot: AdvancedRobot, deltaTime: number) => {
+      // Determine target position
+      let targetX = robot.targetPose.x;
+      let targetY = robot.targetPose.y;
+      
+      // Use planned path if available
+      if (robot.plannedPath.length > 0 && robot.currentWaypoint < robot.plannedPath.length) {
+        const waypoint = robot.plannedPath[robot.currentWaypoint];
+        targetX = waypoint.x;
+        targetY = waypoint.y;
+      }
+      
+      // PID control for position
+      const forceX = robot.pidController.x.update(targetX, robot.x, deltaTime);
+      const forceY = robot.pidController.y.update(targetY, robot.y, deltaTime);
+      
+      // Calculate desired heading
+      const dx = targetX - robot.x;
+      const dy = targetY - robot.y;
+      const desiredHeading = Math.atan2(dy, dx);
+      
+      // PID control for heading
+      let headingError = desiredHeading - robot.angle;
+      while (headingError > Math.PI) headingError -= 2 * Math.PI;
+      while (headingError < -Math.PI) headingError += 2 * Math.PI;
+      
+      const headingControl = robot.pidController.heading.update(0, headingError, deltaTime);
+      
+      // Apply control forces
+      robot.vx += forceX * deltaTime * 0.01;
+      robot.vy += forceY * deltaTime * 0.01;
+      robot.angle += headingControl * deltaTime * 0.1;
+      
+      // Limit velocity
+      const maxSpeed = ROBOT_SPEED;
+      const speed = Math.sqrt(robot.vx * robot.vx + robot.vy * robot.vy);
+      if (speed > maxSpeed) {
+        robot.vx = (robot.vx / speed) * maxSpeed;
+        robot.vy = (robot.vy / speed) * maxSpeed;
+      }
     };
 
     const animate = () => {
@@ -500,11 +792,20 @@ export default function RoombaSimulation() {
         });
       });
 
-      // Update robots with swarm behavior
+      // Update robots with advanced swarm behavior
       robotsRef.current.forEach((robot) => {
-        // Update sensor data
-        updateSensorData(robot);
-        updateParticleFilter(robot);
+        const deltaTime = 0.1; // 10Hz update rate
+        
+        // Update advanced sensor systems
+        updateAdvancedSensorData(robot);
+        updateAdvancedParticleFilter(robot);
+        updateSLAM(robot);
+        updatePathPlanning(robot);
+        
+        // Update control system based on mode
+        if (robot.controlMode === "autonomous") {
+          updatePIDControl(robot, deltaTime);
+        }
         
         // Update telemetry
         robot.batteryLevel -= 0.01;
@@ -696,6 +997,69 @@ export default function RoombaSimulation() {
           ctx.stroke();
         }
         
+        // Draw planned path for selected robot
+        if (selectedRobot.plannedPath.length > 1) {
+          ctx.strokeStyle = "rgba(100, 255, 100, 0.7)";
+          ctx.lineWidth = 3;
+          ctx.setLineDash([10, 5]);
+          ctx.beginPath();
+          selectedRobot.plannedPath.forEach((waypoint, i) => {
+            if (i === 0) {
+              ctx.moveTo(waypoint.x, waypoint.y);
+            } else {
+              ctx.lineTo(waypoint.x, waypoint.y);
+            }
+          });
+          ctx.stroke();
+          ctx.setLineDash([]);
+          
+          // Highlight current waypoint
+          if (selectedRobot.currentWaypoint < selectedRobot.plannedPath.length) {
+            const currentWP = selectedRobot.plannedPath[selectedRobot.currentWaypoint];
+            ctx.fillStyle = "rgba(255, 255, 100, 0.8)";
+            ctx.beginPath();
+            ctx.arc(currentWP.x, currentWP.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = "rgba(255, 255, 0, 1)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        }
+        
+        // Draw SLAM landmarks for selected robot
+        selectedRobot.landmarks.forEach(landmark => {
+          const alpha = Math.min(1, landmark.confidence);
+          ctx.fillStyle = `rgba(255, 150, 50, ${alpha})`;
+          ctx.beginPath();
+          ctx.arc(landmark.position.x, landmark.position.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Draw landmark ID
+          ctx.fillStyle = "rgba(255, 200, 100, 0.8)";
+          ctx.font = "10px monospace";
+          ctx.fillText(`L${landmark.id}`, landmark.position.x + 8, landmark.position.y - 8);
+        });
+        
+        // Draw pose uncertainty ellipse
+        const poseCovariance = selectedRobot.pose.covariance;
+        if (poseCovariance && poseCovariance.length >= 2) {
+          const eigenvals = calculateEigenvalues(poseCovariance[0][0], poseCovariance[0][1], poseCovariance[1][1]);
+          const angle = 0.5 * Math.atan2(2 * poseCovariance[0][1], poseCovariance[0][0] - poseCovariance[1][1]);
+          
+          ctx.save();
+          ctx.translate(selectedRobot.pose.x, selectedRobot.pose.y);
+          ctx.rotate(angle);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, Math.sqrt(eigenvals.max) * 3, Math.sqrt(eigenvals.min) * 3, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+        
         // Draw waypoints for selected robot
         if (selectedRobot.waypoints.length > 1) {
           ctx.strokeStyle = "rgba(255, 100, 255, 0.5)";
@@ -865,10 +1229,14 @@ export default function RoombaSimulation() {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, []); // Empty dependency array - only runs once
+    } catch (error) {
+      console.error('RoombaSimulation animation error:', error);
+    }
+  }, [isClient, robotsInitialized]); // Depend on client state and robot initialization
 
   // Game stats update and best time tracking
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const stored = localStorage.getItem("swarmBestTime");
     if (stored) {
       bestTimeRef.current = parseFloat(stored);
@@ -881,7 +1249,9 @@ export default function RoombaSimulation() {
       const time = (Date.now() - startTimeRef.current) / 1000;
       if (coverage >= 100 && (!bestTimeRef.current || time < bestTimeRef.current)) {
         bestTimeRef.current = time;
-        localStorage.setItem("swarmBestTime", bestTimeRef.current.toString());
+        if (typeof window !== 'undefined') {
+          localStorage.setItem("swarmBestTime", bestTimeRef.current.toString());
+        }
       }
       setGameStats({ coverage, time, best: bestTimeRef.current });
     }, 100);
@@ -912,9 +1282,9 @@ export default function RoombaSimulation() {
         <div class="font-mono text-xs text-cyan-400">
           <div class="mb-2 text-sm font-bold text-white">ROBOT ${robot.id} [${robot.role.toUpperCase()}]</div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-            <div>POS: (${robot.x.toFixed(0)}, ${robot.y.toFixed(0)})</div>
+            <div>POS: (${robot.pose.x.toFixed(0)}, ${robot.pose.y.toFixed(0)})</div>
             <div>VEL: ${Math.sqrt(robot.vx**2 + robot.vy**2).toFixed(2)} m/s</div>
-            <div>HDG: ${((robot.angle * 180 / Math.PI) % 360).toFixed(0)}°</div>
+            <div>HDG: ${((robot.pose.theta * 180 / Math.PI) % 360).toFixed(0)}°</div>
             <div>CONF: ${(robot.confidence * 100).toFixed(0)}%</div>
             <div>BAT: ${robot.batteryLevel.toFixed(0)}%</div>
             <div>TEMP: ${robot.temperature.toFixed(1)}°C</div>
@@ -927,7 +1297,16 @@ export default function RoombaSimulation() {
             IMU: [${robot.sensors.imu.ax.toFixed(1)}, ${robot.sensors.imu.ay.toFixed(1)}, ${robot.sensors.imu.gz.toFixed(1)}]
           </div>
           <div class="text-xs opacity-70">
-            Waypoints: ${robot.waypoints.length} | Particles: ${PARTICLE_COUNT}
+            SLAM: ${robot.landmarks.length} landmarks | Mode: ${robot.controlMode.toUpperCase()}
+          </div>
+          <div class="text-xs opacity-70">
+            Path: ${robot.plannedPath.length} waypoints | Alg: ${robot.pathPlanningMode.toUpperCase()}
+          </div>
+          <div class="text-xs opacity-70">
+            Distance: ${robot.distanceTraveled.toFixed(1)}m | Efficiency: ${(robot.explorationEfficiency * 100).toFixed(1)}%
+          </div>
+          <div class="text-xs opacity-70">
+            Energy: ${robot.energyConsumption.toFixed(1)}J | Collisions: ${robot.collisionCount}
           </div>
         </div>
       `;
@@ -936,6 +1315,11 @@ export default function RoombaSimulation() {
     const interval = setInterval(updateTelemetry, 100);
     return () => clearInterval(interval);
   }, []);
+
+  // Don't render on server side to avoid hydration mismatches
+  if (!isClient) {
+    return null;
+  }
 
   return (
     <>

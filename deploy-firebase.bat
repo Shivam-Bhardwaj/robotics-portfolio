@@ -1,0 +1,13 @@
+@echo off
+echo Building project...
+npm run build
+echo.
+echo Installing Firebase CLI...
+npm install -g firebase-tools
+echo.
+echo Login to Firebase (browser will open)...
+firebase login
+echo.
+echo Deploying to Firebase...
+firebase deploy
+pause

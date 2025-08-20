@@ -1,0 +1,61 @@
+# Codecov configuration
+coverage:
+  precision: 2
+  round: down
+  range: "70...95"
+  
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+        base: auto
+    patch:
+      default:
+        target: 75%
+        threshold: 2%
+    changes:
+      default:
+        target: auto
+        threshold: 1%
+
+  ignore:
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
+    - "**/*.spec.ts"
+    - "**/*.spec.tsx"
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/__tests__/**"
+    - "**/*.d.ts"
+    - "**/node_modules/**"
+    - "**/.next/**"
+    - "**/out/**"
+    - "**/coverage/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "jest.config.js"
+    - "jest.setup.js"
+    - "playwright.config.ts"
+    - "next.config.ts"
+    - "tailwind.config.js"
+    - "postcss.config.mjs"
+    - "eslint.config.mjs"
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false
+  require_base: no
+  require_head: yes
+
+github_checks:
+  annotations: true
