@@ -11,7 +11,7 @@
  * - Force/torque sensors
  */
 
-import { Vector2, Vector3, Quat, RoboticsUtils } from './math';
+import { Vector2, Vector3, Quat, Transform3D } from './math';
 
 // ============================================================================
 // SENSOR INTERFACES AND TYPES
@@ -661,7 +661,7 @@ export class EncoderSensor {
 // ============================================================================
 
 export class SensorFusion {
-  private sensors: Map<string, any> = new Map();
+  private sensors: Map<string, LidarSensor | IMUSensor | GPSSensor | CameraSensor | UltrasonicSensor | EncoderSensor> = new Map();
   private fusedState = {
     position: Vector2.zero(),
     velocity: Vector2.zero(),
@@ -671,7 +671,7 @@ export class SensorFusion {
 
   constructor() {}
 
-  addSensor(sensorId: string, sensor: any): void {
+  addSensor(sensorId: string, sensor: LidarSensor | IMUSensor | GPSSensor | CameraSensor | UltrasonicSensor | EncoderSensor): void {
     this.sensors.set(sensorId, sensor);
   }
 
@@ -679,9 +679,9 @@ export class SensorFusion {
     let totalWeight = 0;
     let weightedPosition = Vector2.zero();
     let weightedVelocity = Vector2.zero();
-    const weightedOrientation = 0;
+    // const weightedOrientation = 0; // Reserved for future use
 
-    readings.forEach((reading, sensorId) => {
+    readings.forEach((reading) => {
       const weight = reading.confidence / (1 + reading.noise);
       
       // Extract position information based on sensor type
@@ -720,4 +720,3 @@ export class SensorFusion {
     return { ...this.fusedState };
   }
 }
-

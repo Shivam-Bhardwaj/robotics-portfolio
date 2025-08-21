@@ -1,4 +1,4 @@
-import SwarmGame from "@/components/SwarmGame";
+import SwarmGameUltra from "@/components/SwarmGameUltra";
 
 export const metadata = { title: "Swarm" };
 
@@ -9,7 +9,7 @@ export default function SwarmPage() {
       <p className="text-center mb-8 text-gray-600">
         Experiment with a simple swarm and try to gather all robots at the target as fast as possible.
       </p>
-      <SwarmGame />
+      <SwarmGameUltra />
     </div>
 
   );

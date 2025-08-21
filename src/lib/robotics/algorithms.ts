@@ -9,7 +9,7 @@
  * - Obstacle avoidance and navigation
  */
 
-import { Vector2, Vector3, Transform3D, KalmanFilter, PIDController } from './math';
+import { Vector2, PIDController } from './math';
 
 // ============================================================================
 // PATH PLANNING ALGORITHMS
@@ -362,10 +362,13 @@ export class EKFSLAMFilter {
     for (const obs of observations) {
       if (obs.landmarkId !== undefined && this.landmarks.has(obs.landmarkId)) {
         // Update existing landmark
-        this.updateLandmark(obs);
-      } else {
+        this.updateLandmark({ range: obs.range, bearing: obs.bearing, landmarkId: obs.landmarkId });
+      } else if (obs.landmarkId !== undefined) {
         // Add new landmark
-        this.addLandmark(obs);
+        this.addLandmark({ range: obs.range, bearing: obs.bearing });
+      } else {
+        // Add new landmark without ID
+        this.addLandmark({ range: obs.range, bearing: obs.bearing });
       }
     }
   }
@@ -459,7 +462,8 @@ export class EKFSLAMFilter {
   }
 
   private getObservationJacobian(landmarkIndex: number): number[][] {
-    const [x, y, theta] = this.state;
+    const [x, y] = this.state;
+    // const theta = this.state[2]; // Reserved for future use
     const [lx, ly] = [this.state[landmarkIndex], this.state[landmarkIndex + 1]];
     
     const dx = lx - x;
@@ -578,7 +582,13 @@ export interface SwarmAgent {
   position: Vector2;
   velocity: Vector2;
   neighbors: Set<number>;
-  state: any;
+  state: {
+    consensusValue?: number[];
+    formationPosition?: Vector2;
+    energy?: number;
+    communication?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export class ConsensusAlgorithm {
@@ -764,7 +774,7 @@ export class FlockingBehavior {
 export interface SensorReading {
   timestamp: number;
   type: 'imu' | 'gps' | 'lidar' | 'camera' | 'encoder';
-  data: any;
+  data: Record<string, unknown>;
   uncertainty: number;
 }
 
@@ -897,4 +907,3 @@ interface Particle {
   theta: number;
   weight: number;
 }
-

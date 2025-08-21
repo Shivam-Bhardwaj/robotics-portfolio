@@ -477,7 +477,7 @@ export class InverseKinematics {
       if (error <= tolerance) break;
 
       // Calculate Jacobian numerically
-      const jacobian = this.calculateJacobian(currentDH, dhParams);
+      const jacobian = this.calculateJacobian(currentDH);
       
       // Pseudo-inverse method for joint updates
       const deltaJoints = this.pseudoInverse(jacobian, positionError);
@@ -498,7 +498,7 @@ export class InverseKinematics {
     };
   }
 
-  private static calculateJacobian(currentDH: DHParameter[], originalDH: DHParameter[]): number[][] {
+  private static calculateJacobian(currentDH: DHParameter[]): number[][] {
     const epsilon = 0.001;
     const jacobian: number[][] = [];
     
@@ -527,7 +527,7 @@ export class InverseKinematics {
   private static pseudoInverse(jacobian: number[][], error: Vector3): number[] {
     // Simplified pseudo-inverse calculation
     const jT = this.transpose(jacobian);
-    const jTj = this.multiplyMatrixVector(jT, jacobian);
+    const jTj = this.multiplyMatrices(jT, jacobian);
     
     // Simple damped least squares
     const damping = 0.01;
@@ -539,6 +539,20 @@ export class InverseKinematics {
     const jTe = this.multiplyMatrixVector(jT, [error.x, error.y, error.z]);
     
     return this.multiplyMatrixVector(inv, jTe);
+  }
+
+  private static multiplyMatrices(a: number[][], b: number[][]): number[][] {
+    const result: number[][] = Array(a.length).fill(0).map(() => Array(b[0].length).fill(0));
+    
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b[0].length; j++) {
+        for (let k = 0; k < b.length; k++) {
+          result[i][j] += a[i][k] * b[k][j];
+        }
+      }
+    }
+    
+    return result;
   }
 
   private static transpose(matrix: number[][]): number[][] {
@@ -922,4 +936,3 @@ export class RoboticsUtils {
     return trajectory;
   }
 }
-
