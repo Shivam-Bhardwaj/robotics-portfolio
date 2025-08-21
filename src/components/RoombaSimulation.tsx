@@ -1280,7 +1280,7 @@ export default function RoombaSimulation() {
       
       telemetryRef.current.innerHTML = `
         <div class="font-mono text-xs text-cyan-400">
-          <div class="mb-2 text-sm font-bold text-white">ROBOT ${robot.id} [${robot.role.toUpperCase()}]</div>
+          <div class="mb-2 text-sm font-bold text-gray-900">ROBOT ${robot.id} [${robot.role.toUpperCase()}]</div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-1">
             <div>POS: (${robot.pose.x.toFixed(0)}, ${robot.pose.y.toFixed(0)})</div>
             <div>VEL: ${Math.sqrt(robot.vx**2 + robot.vy**2).toFixed(2)} m/s</div>

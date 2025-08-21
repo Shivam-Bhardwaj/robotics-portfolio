@@ -15,10 +15,10 @@ export default function StyleGuide() {
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <motion.div variants={fadeIn} className="text-center mb-16">
-          <h1 className="text-display-lg text-gradient font-robotics mb-4">
+          <h1 className="text-display-lg text-gradient font-robotics mb-4 text-foreground">
             Design System
           </h1>
-          <p className="text-xl text-foreground-secondary max-w-3xl mx-auto">
+          <p className="text-xl text-foreground-secondary max-w-3xl mx-auto text-foreground">
             A comprehensive design system for the robotics portfolio, featuring modern components, 
             animations, and accessibility-first design principles.
           </p>
